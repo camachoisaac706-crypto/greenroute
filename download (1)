@@ -1,0 +1,37 @@
+import { Router } from "express";
+import { store } from "../store.js";
+import { requireAuth } from "../auth.js";
+import { wrap, requireFields, oneOf, HttpError } from "../util.js";
+
+const router = Router();
+router.use(requireAuth);
+
+const STATUSES = ["scheduled", "in_progress", "done"];
+const NEXT = { scheduled: "in_progress", in_progress: "done", done: "done" };
+
+router.get("/", (req, res) => res.json(store.listJobs()));
+
+router.post("/", wrap((req, res) => {
+  requireFields(req.body, ["client_id", "crew_id", "service"]);
+  if (!store.getClient(req.body.client_id)) throw new HttpError(400, "Unknown client_id");
+  if (!store.getCrew(req.body.crew_id)) throw new HttpError(400, "Unknown crew_id");
+  if (req.body.status) oneOf(req.body.status, STATUSES, "status");
+  res.status(201).json(store.createJob(req.body));
+}));
+
+// PATCH {status} sets it; {advance:true} moves to the next stage.
+router.patch("/:id", wrap((req, res) => {
+  const job = store.getJob(req.params.id);
+  if (!job) throw new HttpError(404, "Job not found");
+  let status = job.status;
+  if (req.body.advance) status = NEXT[job.status];
+  else if (req.body.status) { oneOf(req.body.status, STATUSES, "status"); status = req.body.status; }
+  res.json(store.setJobStatus(job.id, status));
+}));
+
+router.delete("/:id", wrap((req, res) => {
+  if (!store.deleteJob(req.params.id)) throw new HttpError(404, "Job not found");
+  res.status(204).end();
+}));
+
+export default router;

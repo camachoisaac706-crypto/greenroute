@@ -1,0 +1,67 @@
+import React, { useState } from "react";
+import { Sprout, ArrowRight, Loader2 } from "lucide-react";
+import { T, display, body, mono } from "../theme.js";
+import { api } from "../api.js";
+import { Btn, ErrorNote } from "../ui.jsx";
+
+export default function Login({ onAuthed, backToSite }) {
+  const [email, setEmail] = useState("owner@greenroute.app");
+  const [password, setPassword] = useState("greenroute");
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { token, user } = await api.login(email, password);
+      api.setToken(token);
+      onAuthed(user);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const field = "w-full rounded-lg border px-3 py-2.5 text-sm mt-1";
+  return (
+    <div style={{ background: T.paper, color: T.ink, fontFamily: body }} className="min-h-full grid place-items-center p-5">
+      <div className="w-full max-w-sm">
+        <button onClick={backToSite} className="flex items-center gap-2 mb-6">
+          <span style={{ background: T.pine }} className="w-9 h-9 rounded-lg grid place-items-center"><Sprout size={19} color="#EAF3E6" /></span>
+          <span style={{ fontFamily: display, fontWeight: 800, letterSpacing: -0.4 }} className="text-xl">GreenRoute</span>
+        </button>
+
+        <div style={{ background: T.card, borderColor: T.line }} className="rounded-2xl border p-6">
+          <h1 style={{ fontFamily: display, fontWeight: 700 }} className="text-xl">Sign in</h1>
+          <p style={{ color: T.sub }} className="text-sm mt-1">Welcome back. Let's get the crews rolling.</p>
+
+          <div className="mt-5 space-y-3" onKeyDown={(e) => e.key === "Enter" && submit()}>
+            <div>
+              <label style={{ color: T.sub }} className="text-xs">Email</label>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} style={{ borderColor: T.line, fontFamily: body }} className={field} autoComplete="username" />
+            </div>
+            <div>
+              <label style={{ color: T.sub }} className="text-xs">Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ borderColor: T.line, fontFamily: body }} className={field} autoComplete="current-password" />
+            </div>
+          </div>
+
+          {error && <div className="mt-4"><ErrorNote message={error} /></div>}
+
+          <div className="mt-5">
+            <Btn onClick={submit} disabled={busy}>
+              {busy ? <Loader2 size={16} style={{ animation: "spin 0.9s linear infinite" }} /> : <ArrowRight size={16} />}
+              {busy ? "Signing in" : "Sign in"}
+            </Btn>
+          </div>
+
+          <p style={{ color: T.faint, fontFamily: mono, fontSize: 12 }} className="mt-5">
+            Demo · owner@greenroute.app / greenroute
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

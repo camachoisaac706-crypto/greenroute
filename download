@@ -1,0 +1,68 @@
+# GreenRoute — Web App
+
+The React + Vite frontend for GreenRoute, wired to the GreenRoute API. Real login,
+real persistence, every screen backed by the backend.
+
+## Quickstart
+
+Requires Node 18+ and the **GreenRoute API running** (see `greenroute-backend`).
+
+```bash
+npm install
+npm run dev        # http://localhost:5173
+```
+
+Sign in with the demo account:
+
+```
+email:    owner@greenroute.app
+password: greenroute
+```
+
+## Pointing at the API
+
+By default the app calls `http://localhost:4000/api`. To change it, copy
+`.env.example` to `.env` and set:
+
+```
+VITE_API_URL=https://your-api-host/api
+```
+
+## Build for production
+
+```bash
+npm run build      # outputs static files to dist/
+npm run preview    # serve the built app locally
+```
+
+Deploy `dist/` to any static host (Netlify, Vercel, Cloudflare Pages, S3, nginx).
+Set `VITE_API_URL` at build time so the bundle points at your deployed API, and
+make sure the API's `CORS_ORIGIN` allows your frontend's URL.
+
+## How it's wired
+
+- `src/api.js` — the only place that talks to the backend. Holds the JWT in
+  `localStorage`, attaches it as `Authorization: Bearer …`, and exposes one method
+  per backend action. Swap the base URL here or via `VITE_API_URL`.
+- `src/App.jsx` — auth gate and navigation. Three views: marketing site, login,
+  and the app shell.
+- `src/pages/*` — one file per screen. Each loads its own data through `api.js`,
+  shows loading and error states, and updates from the server's response after
+  every change (advance a job, optimize a route, send an invoice, log service).
+- `src/ui.jsx` / `src/theme.js` — shared components and the design tokens.
+
+## Project structure
+
+```
+greenroute-frontend/
+  index.html
+  vite.config.js · tailwind.config.js · postcss.config.js
+  .env.example
+  src/
+    main.jsx · App.jsx · api.js · theme.js · ui.jsx · index.css
+    pages/
+      Site.jsx · Login.jsx
+      Overview.jsx · Schedule.jsx · Routes.jsx · Equipment.jsx · Clients.jsx
+  scripts/
+    smoke.mjs        # integration test against a running backend
+```

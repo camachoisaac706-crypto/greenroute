@@ -1,0 +1,61 @@
+// Replicates the frontend's api.js calls against a live backend to prove wiring.
+const BASE = process.env.VITE_API_URL || "http://localhost:4000/api";
+let token = null;
+async function req(path, { method = "GET", body } = {}) {
+  const res = await fetch(BASE + path, {
+    method,
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+let ok = 0, bad = 0;
+const check = (name, cond, extra = "") => { if (cond) { ok++; console.log("PASS ", name, extra); } else { bad++; console.log("FAIL ", name, extra); } };
+
+// Login (Login.jsx)
+const auth = await req("/auth/login", { method: "POST", body: { email: "owner@greenroute.app", password: "greenroute" } });
+token = auth.token;
+check("login returns token+user", !!auth.token && auth.user?.email === "owner@greenroute.app");
+
+// Overview.jsx
+const ov = await req("/metrics/overview");
+check("overview shape", ov.company?.arr === 10000000 && Array.isArray(ov.mrr?.values) && typeof ov.today?.jobsDone === "number",
+  `arr=${ov.company?.arr} mrr=${ov.mrr?.values?.length} jobsDone=${ov.today?.jobsDone}`);
+
+// Schedule.jsx
+const [crews, clients, jobs] = [await req("/crews"), await req("/clients"), await req("/jobs")];
+check("crews/clients/jobs load", crews.length === 3 && clients.length === 7 && jobs.length >= 6, `crews=${crews.length} clients=${clients.length} jobs=${jobs.length}`);
+check("job has joined fields", jobs[0].client && jobs[0].crew_id && jobs[0].status);
+const newJob = await req("/jobs", { method: "POST", body: { client_id: clients[0].id, crew_id: crews[1].id, service: "Leaf removal" } });
+check("addJob returns created row", newJob.client === clients[0].name && newJob.crew_id === crews[1].id, `id=${newJob.id}`);
+const sched = jobs.find(j => j.status === "scheduled");
+const adv = await req(`/jobs/${sched.id}`, { method: "PATCH", body: { advance: true } });
+check("advanceJob moves status", adv.status === "in_progress", `-> ${adv.status}`);
+
+// Routes.jsx
+const r0 = await req(`/routes/${crews[2].id}`);
+check("route has stops+miles", Array.isArray(r0.stops) && r0.stops[0].name === "Yard / Depot" && r0.miles > 0, `${r0.miles}mi ${r0.drive_minutes}min`);
+const ropt = await req(`/routes/${crews[2].id}/optimize`, { method: "POST" });
+check("optimize returns saved + not longer", ropt.miles <= r0.miles && typeof ropt.miles_saved === "number", `${r0.miles}->${ropt.miles} saved ${ropt.miles_saved}`);
+
+// Equipment.jsx
+const equip = await req("/equipment");
+const due = equip.find(e => e.status === "maintenance");
+check("equipment list + service_at field", equip.length === 6 && typeof due.service_at === "number");
+const serviced = await req(`/equipment/${due.id}`, { method: "PATCH", body: { service: true } });
+check("logService resets", serviced.status === "active" && serviced.hours === 0, `${due.name}`);
+
+// Clients.jsx
+const invBefore = await req("/invoices");
+const created = await req("/invoices", { method: "POST", body: { client_id: clients[0].id } });
+check("createInvoice auto amount", created.client === clients[0].name && created.status === "draft" && created.amount > 0, `$${created.amount}`);
+const sent = await req(`/invoices/${created.id}`, { method: "PATCH", body: { advance: true } });
+const paid = await req(`/invoices/${created.id}`, { method: "PATCH", body: { advance: true } });
+check("invoice draft->sent->paid", sent.status === "sent" && paid.status === "paid");
+check("invoice list grew", (await req("/invoices")).length === invBefore.length + 1);
+
+console.log(`\n${ok} passed, ${bad} failed`);
+process.exit(bad ? 1 : 0);
